@@ -1,4 +1,4 @@
-﻿#!/usr/bin/python
+#!/usr/bin/python
 # -*- coding: utf-8 -*-
 
 import sys
@@ -23,7 +23,12 @@ BEGIN
     %(body)s
 END
 '''
-
+PROCEDURE_CREATE_GET_TEMPLATE = '''
+CREATE PROCEDURE `%(name)s`(
+%(param)s
+)
+%(body)s
+'''
 class Spgen(object):
     cnx = None
     tables = []
@@ -44,7 +49,7 @@ class Spgen(object):
                     selected.append(c)
 
             return PROCEDURE_CREATE_TEMPLATE % {
-                'name': mode + table,
+                'name': mode +'_' + table,
                 'param': ',\n'.join(map(lambda x: 'p_%s %s' % (x[0], x[1]), selected)),
                 'body': 'insert into %s(%s) values(%s);' % (
                     table,
@@ -67,7 +72,7 @@ class Spgen(object):
                 return None
 
             return PROCEDURE_CREATE_TEMPLATE % {
-                'name': mode + table,
+                'name': mode +'_' + table,
                 'param': ',\n'.join(map(lambda x: 'p_%s %s' % (x[0], x[1]), columns)),
                 'body': 'update %s set %s where %s;' % (
                     table,
@@ -86,11 +91,33 @@ class Spgen(object):
                 return None
 
             return PROCEDURE_CREATE_TEMPLATE % {
-                'name': mode + table,
+                'name': mode +'_' + table,
                 'param': ',\n'.join(map(lambda x: 'p_%s %s' % (x[0], x[1]), key_columns)),
                 'body': 'delete from %s where %s;' % (
                     table,
                     ' and '.join(map(lambda x: '%(name)s = p_%(name)s' % { 'name': x[0] }, key_columns))
+                    )
+                }
+        elif mode == 'get':
+            selected = []
+            for c in columns:
+                if c[5] != 'auto_increment' and c[1] != 'timestamp':
+                    selected.append(c)
+
+            print(PROCEDURE_CREATE_GET_TEMPLATE % {
+                'name': mode +'_' + table,
+                'param': '\n',
+                'body': 'select %s from %s ;' % (
+                    ','.join(map(lambda x: x[0], selected)),
+                    table
+                    )
+            })
+            return PROCEDURE_CREATE_GET_TEMPLATE % {
+                'name': mode +'_' + table,
+                'param': '\n',
+                'body': 'select %s from %s' % (
+                    ','.join(map(lambda x: x[0], selected)),
+                    table
                     )
                 }
 
@@ -98,12 +125,12 @@ class Spgen(object):
         cursor = self.cnx.cursor()
 
 
-        cursor.execute('show tables')
-        db_tables = [data[0] for data in cursor]
+       # cursor.execute('show tables')
+      #  db_tables = [data[0] for data in cursor]
 
-        self.tables = set(self.tables).intersection(set(db_tables))
+       # self.tables = set(self.tables).intersection(set(db_tables))
 
-        modes = ('add', 'update', 'delete')
+        modes = ('add', 'update', 'delete','get')
 
         count = 0
         total = len(self.tables) * len(modes)
@@ -118,7 +145,6 @@ class Spgen(object):
                 script = self.create(mode, table, columns)
                 if script is not None:
                     drop_script = PROCEDURE_DROP_TEMPLATE % { 'name': mode + table }
-
                     cursor.execute(drop_script)
                     cursor.execute(script)
 
